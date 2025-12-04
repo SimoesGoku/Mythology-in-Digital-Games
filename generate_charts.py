@@ -511,37 +511,40 @@ def charts_by_myth_genre_distribution_secondary():
         print("→ Gerado:", out_path)
 
 
-def charts_by_myth_internal_vs_external():
-    """
-    Para cada mitologia, gráfico 2 barras:
-    - 'Interno'  → jogos feitos em estúdios cujo country_code coincide com mythologies.region
-    - 'Externo'  → resto
+# ----- Interno vs Externo: helpers -----
 
-    NOTA:
-    - mythologies.region e studios.country_code devem ter o MESMO texto
-      (ex: 'Egito', 'Estados Unidos', 'Inglaterra').
-    - Mitologias sem region preenchido são ignoradas neste gráfico.
+def _charts_by_myth_internal_external_base(role_filter, label_suffix, filename_prefix):
+    """
+    Gera gráficos Interno vs Externo por mitologia, a contar Nº de ESTÚDIOS,
+    com filtro opcional por role (Developer / Publisher / None para todos).
     """
     conn = get_conn()
 
-    df = pd.read_sql_query("""
+    sql = """
         SELECT 
             m.id   AS myth_id,
             m.name AS myth_name,
             m.region AS myth_region,
             s.country_code AS country_name,
-            COUNT(DISTINCT gm.game_id) AS num_games
+            gs.role AS role,
+            COUNT(DISTINCT s.id) AS num_studios
         FROM game_mythologies gm
         JOIN mythologies m ON gm.mythology_id = m.id
         JOIN game_studios gs ON gm.game_id    = gs.game_id
         JOIN studios s      ON gs.studio_id   = s.id
-        GROUP BY m.id, s.country_code;
-    """, conn)
+    """
+    params = []
+    if role_filter is None:
+        sql += "GROUP BY m.id, s.country_code;\n"
+    else:
+        sql += "WHERE gs.role = ?\nGROUP BY m.id, s.country_code;\n"
+        params.append(role_filter)
 
+    df = pd.read_sql_query(sql, conn, params=params)
     conn.close()
 
     if df.empty:
-        print("Sem dados para interno vs externo (sem linhas de estúdios/países).")
+        print(f"Sem dados para interno vs externo ({label_suffix}).")
         return
 
     records = []
@@ -563,11 +566,11 @@ def charts_by_myth_internal_vs_external():
             "myth_id": row["myth_id"],
             "myth_name": row["myth_name"],
             "origin_type": origin_type,
-            "num_games": row["num_games"],
+            "num_studios": row["num_studios"],
         })
 
     if not records:
-        print("Sem dados utilizáveis para interno vs externo (provavelmente faltam regions nas mitologias).")
+        print(f"Sem dados utilizáveis para interno vs externo ({label_suffix}).")
         return
 
     df2 = pd.DataFrame(records)
@@ -575,8 +578,8 @@ def charts_by_myth_internal_vs_external():
     for myth_id, group in df2.groupby("myth_id"):
         myth_name = group["myth_name"].iloc[0]
 
-        interno = group.loc[group["origin_type"] == "Interno", "num_games"].sum()
-        externo = group.loc[group["origin_type"] == "Externo", "num_games"].sum()
+        interno = group.loc[group["origin_type"] == "Interno", "num_studios"].sum()
+        externo = group.loc[group["origin_type"] == "Externo", "num_studios"].sum()
 
         if interno == 0 and externo == 0:
             continue
@@ -586,15 +589,48 @@ def charts_by_myth_internal_vs_external():
 
         fig, ax = plt.subplots(figsize=(5, 4))
         ax.bar(labels, values)
-        ax.set_title(f"Origem das representações – {myth_name}")
-        ax.set_ylabel("Nº de jogos")
+        ax.set_title(f"Origem das representações ({label_suffix}) – {myth_name}")
+        ax.set_ylabel("Nº de estúdios")
 
         plt.tight_layout()
         safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in myth_name)
-        out_path = os.path.join(OUTPUT_BY_MYTH, f"internal_external_{myth_id}_{safe_name}.png")
+        out_path = os.path.join(OUTPUT_BY_MYTH, f"{filename_prefix}_{myth_id}_{safe_name}.png")
         plt.savefig(out_path, dpi=200, bbox_inches="tight")
         plt.close(fig)
         print("→ Gerado:", out_path)
+
+
+def charts_by_myth_internal_external_all():
+    """
+    Interno vs Externo – TODOS os estúdios (qualquer role).
+    """
+    _charts_by_myth_internal_external_base(
+        role_filter=None,
+        label_suffix="todos os estúdios",
+        filename_prefix="internal_external_all"
+    )
+
+
+def charts_by_myth_internal_external_devs():
+    """
+    Interno vs Externo – só Developers (assume gs.role = 'Developer').
+    """
+    _charts_by_myth_internal_external_base(
+        role_filter="Developer",
+        label_suffix="Developers",
+        filename_prefix="internal_external_devs"
+    )
+
+
+def charts_by_myth_internal_external_pubs():
+    """
+    Interno vs Externo – só Publishers (assume gs.role = 'Publisher').
+    """
+    _charts_by_myth_internal_external_base(
+        role_filter="Publisher",
+        label_suffix="Publishers",
+        filename_prefix="internal_external_pubs"
+    )
 
 
 def charts_by_myth_platform_distribution():
@@ -662,7 +698,9 @@ def main():
     charts_by_myth_timelines()
     charts_by_myth_genre_distribution_primary()
     charts_by_myth_genre_distribution_secondary()
-    charts_by_myth_internal_vs_external()
+    charts_by_myth_internal_external_all()
+    charts_by_myth_internal_external_devs()
+    charts_by_myth_internal_external_pubs()
     charts_by_myth_platform_distribution()
 
 
