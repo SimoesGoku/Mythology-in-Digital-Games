@@ -40,7 +40,7 @@ def chart_global_myth_distribution():
         FROM mythologies m
         LEFT JOIN game_mythologies gm ON gm.mythology_id = m.id
         GROUP BY m.id, m.name
-        ORDER BY num_games DESC, m.name;  -- ordem por frequência
+        ORDER BY num_games DESC, m.name;
     """)
     rows = cur.fetchall()
     conn.close()
@@ -125,10 +125,9 @@ def chart_global_releases_per_month():
     print("→ Gerado:", out_path)
 
 
-def chart_heatmap_myth_genre():
+def chart_heatmap_myth_genre_primary():
     """
-    Heatmap mitologia × género principal.
-    (Aqui continua só o género principal; por mitologia abaixo usamos todos os géneros.)
+    Heatmap mitologia × género PRINCIPAL (gg.is_primary = 1).
     """
     conn = get_conn()
 
@@ -148,7 +147,7 @@ def chart_heatmap_myth_genre():
     conn.close()
 
     if df.empty:
-        print("Sem dados para heatmap mitologia × género.")
+        print("Sem dados para heatmap mitologia × género principal.")
         return
 
     pivot = df.pivot(index="mythology", columns="genre", values="num_games").fillna(0)
@@ -164,12 +163,62 @@ def chart_heatmap_myth_genre():
 
     ax.set_xlabel("Género principal")
     ax.set_ylabel("Mitologia")
-    ax.set_title("Heatmap: Mitologia × Género (nº de jogos)")
+    ax.set_title("Heatmap: Mitologia × Género principal")
 
     fig.colorbar(cax, ax=ax, label="Nº de jogos")
     plt.tight_layout()
 
-    out_path = os.path.join(OUTPUT_GLOBAL, "heatmap_myth_genre.png")
+    out_path = os.path.join(OUTPUT_GLOBAL, "heatmap_myth_genre_primary.png")
+    plt.savefig(out_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    print("→ Gerado:", out_path)
+
+
+def chart_heatmap_myth_genre_secondary():
+    """
+    Heatmap mitologia × género SECUNDÁRIO
+    (tudo o que NÃO é principal: is_primary = 0 ou NULL).
+    """
+    conn = get_conn()
+
+    df = pd.read_sql_query("""
+        SELECT 
+            m.name AS mythology,
+            g2.name AS genre,
+            COUNT(DISTINCT gm.game_id) AS num_games
+        FROM game_mythologies gm
+        JOIN mythologies   m  ON gm.mythology_id = m.id
+        JOIN game_genres   gg ON gm.game_id      = gg.game_id
+        JOIN genres        g2 ON gg.genre_id     = g2.id
+        WHERE gg.is_primary IS NULL OR gg.is_primary = 0
+        GROUP BY m.id, g2.id;
+    """, conn)
+
+    conn.close()
+
+    if df.empty:
+        print("Sem dados para heatmap mitologia × género secundário.")
+        return
+
+    pivot = df.pivot(index="mythology", columns="genre", values="num_games").fillna(0)
+
+    fig, ax = plt.subplots(figsize=(12, 12))
+    cax = ax.imshow(pivot.values, aspect='auto')
+
+    ax.set_xticks(range(len(pivot.columns)))
+    ax.set_xticklabels(pivot.columns, rotation=45, ha='right', fontsize=6)
+
+    ax.set_yticks(range(len(pivot.index)))
+    ax.set_yticklabels(pivot.index, fontsize=5)
+
+    ax.set_xlabel("Género secundário")
+    ax.set_ylabel("Mitologia")
+    ax.set_title("Heatmap: Mitologia × Género secundário")
+
+    fig.colorbar(cax, ax=ax, label="Nº de jogos")
+    plt.tight_layout()
+
+    out_path = os.path.join(OUTPUT_GLOBAL, "heatmap_myth_genre_secondary.png")
     plt.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     print("→ Gerado:", out_path)
@@ -284,7 +333,7 @@ def chart_global_platform_distribution():
             COUNT(DISTINCT gp.game_id) AS num_games
         FROM platforms p
         JOIN game_platforms gp ON gp.platform_id = p.id
-        JOIN game_mythologies gm ON gm.game_id   = gp.game_id  -- garante que tem mitologia
+        JOIN game_mythologies gm ON gm.game_id   = gp.game_id
         GROUP BY p.id, p.name
         ORDER BY num_games DESC;
     """)
@@ -366,10 +415,10 @@ def charts_by_myth_timelines():
     conn.close()
 
 
-def charts_by_myth_genre_distribution():
+def charts_by_myth_genre_distribution_primary():
     """
     Para cada mitologia, gráfico de barras com distribuição de géneros
-    (TODOS os géneros associados ao jogo, não só o principal).
+    PRINCIPAIS (gg.is_primary = 1).
     """
     conn = get_conn()
 
@@ -383,13 +432,14 @@ def charts_by_myth_genre_distribution():
         JOIN mythologies m ON gm.mythology_id = m.id
         JOIN game_genres gg ON gm.game_id     = gg.game_id
         JOIN genres g2      ON gg.genre_id    = g2.id
+        WHERE gg.is_primary = 1
         GROUP BY m.id, g2.id;
     """, conn)
 
     conn.close()
 
     if df.empty:
-        print("Sem dados para distribuição de géneros por mitologia.")
+        print("Sem dados para distribuição de géneros principais por mitologia.")
         return
 
     for myth_id, group in df.groupby("myth_id"):
@@ -399,7 +449,7 @@ def charts_by_myth_genre_distribution():
 
         fig, ax = plt.subplots(figsize=(8, 4))
         ax.bar(genres, counts)
-        ax.set_title(f"Géneros (todos) – {myth_name}")
+        ax.set_title(f"Géneros principais – {myth_name}")
         ax.set_xlabel("Género")
         ax.set_ylabel("Nº de jogos")
 
@@ -407,7 +457,55 @@ def charts_by_myth_genre_distribution():
         plt.tight_layout()
 
         safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in myth_name)
-        out_path = os.path.join(OUTPUT_BY_MYTH, f"genres_{myth_id}_{safe_name}.png")
+        out_path = os.path.join(OUTPUT_BY_MYTH, f"genres_primary_{myth_id}_{safe_name}.png")
+        plt.savefig(out_path, dpi=200, bbox_inches="tight")
+        plt.close(fig)
+        print("→ Gerado:", out_path)
+
+
+def charts_by_myth_genre_distribution_secondary():
+    """
+    Para cada mitologia, gráfico de barras com distribuição de géneros
+    SECUNDÁRIOS (gg.is_primary = 0 ou NULL).
+    """
+    conn = get_conn()
+
+    df = pd.read_sql_query("""
+        SELECT 
+            m.id   AS myth_id,
+            m.name AS myth_name,
+            g2.name AS genre,
+            COUNT(DISTINCT gm.game_id) AS num_games
+        FROM game_mythologies gm
+        JOIN mythologies m ON gm.mythology_id = m.id
+        JOIN game_genres gg ON gm.game_id     = gg.game_id
+        JOIN genres g2      ON gg.genre_id    = g2.id
+        WHERE gg.is_primary IS NULL OR gg.is_primary = 0
+        GROUP BY m.id, g2.id;
+    """, conn)
+
+    conn.close()
+
+    if df.empty:
+        print("Sem dados para distribuição de géneros secundários por mitologia.")
+        return
+
+    for myth_id, group in df.groupby("myth_id"):
+        myth_name = group["myth_name"].iloc[0]
+        genres = group["genre"].tolist()
+        counts = group["num_games"].tolist()
+
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.bar(genres, counts)
+        ax.set_title(f"Géneros secundários – {myth_name}")
+        ax.set_xlabel("Género")
+        ax.set_ylabel("Nº de jogos")
+
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+
+        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in myth_name)
+        out_path = os.path.join(OUTPUT_BY_MYTH, f"genres_secondary_{myth_id}_{safe_name}.png")
         plt.savefig(out_path, dpi=200, bbox_inches="tight")
         plt.close(fig)
         print("→ Gerado:", out_path)
@@ -554,14 +652,16 @@ def main():
     # GERAIS
     chart_global_myth_distribution()
     chart_global_releases_per_month()
-    chart_heatmap_myth_genre()
+    chart_heatmap_myth_genre_primary()
+    chart_heatmap_myth_genre_secondary()
     chart_heatmap_myth_country()
     chart_games_by_myth_count()
     chart_global_platform_distribution()
 
     # POR MITOLOGIA
     charts_by_myth_timelines()
-    charts_by_myth_genre_distribution()
+    charts_by_myth_genre_distribution_primary()
+    charts_by_myth_genre_distribution_secondary()
     charts_by_myth_internal_vs_external()
     charts_by_myth_platform_distribution()
 
