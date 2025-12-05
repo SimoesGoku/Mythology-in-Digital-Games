@@ -541,29 +541,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'save_all') {
                 </table>
             <?php endif; ?>
 
-            <h4>Novo estúdio como Developer</h4>
+            <h4>Novo estúdio</h4>
             <label>
                 Nome:<br>
                 <input type="text" name="new_dev_name">
             </label>
             <br>
             <label>
-                País (ex: PT, US, JP):<br>
+                País:<br>
                 <input type="text" name="new_dev_country" maxlength="100">
             </label>
             <button type="submit" name="action" value="add_dev">Criar estúdio Dev</button>
-
-            <h4>Novo estúdio como Publisher</h4>
-            <label>
-                Nome:<br>
-                <input type="text" name="new_pub_name">
-            </label>
-            <br>
-            <label>
-                País (ex: PT, US, JP):<br>
-                <input type="text" name="new_pub_country" maxlength="100">
-            </label>
-            <button type="submit" name="action" value="add_pub">Criar estúdio Pub</button>
         </fieldset>
 
         <br>

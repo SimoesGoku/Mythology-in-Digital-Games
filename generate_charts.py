@@ -21,6 +21,16 @@ def get_conn():
     return sqlite3.connect(DB_PATH)
 
 
+def safe_myth_dir_name(name: str) -> str:
+    """
+    Cria um nome de pasta seguro a partir do nome da mitologia.
+    """
+    safe = "".join(c if c.isalnum() or c in " _-" else "_" for c in name)
+    safe = safe.strip()
+    safe = safe.replace(" ", "_")
+    return safe or "Unknown"
+
+
 # ==============================
 # GRÁFICOS GERAIS
 # ==============================
@@ -174,10 +184,9 @@ def chart_heatmap_myth_genre_primary():
     print("→ Gerado:", out_path)
 
 
-def chart_heatmap_myth_genre_secondary():
+def chart_heatmap_myth_genre_all():
     """
-    Heatmap mitologia × género SECUNDÁRIO
-    (tudo o que NÃO é principal: is_primary = 0 ou NULL).
+    Heatmap mitologia × TODOS os géneros (principal + secundários).
     """
     conn = get_conn()
 
@@ -190,14 +199,13 @@ def chart_heatmap_myth_genre_secondary():
         JOIN mythologies   m  ON gm.mythology_id = m.id
         JOIN game_genres   gg ON gm.game_id      = gg.game_id
         JOIN genres        g2 ON gg.genre_id     = g2.id
-        WHERE gg.is_primary IS NULL OR gg.is_primary = 0
         GROUP BY m.id, g2.id;
     """, conn)
 
     conn.close()
 
     if df.empty:
-        print("Sem dados para heatmap mitologia × género secundário.")
+        print("Sem dados para heatmap mitologia × todos os géneros.")
         return
 
     pivot = df.pivot(index="mythology", columns="genre", values="num_games").fillna(0)
@@ -211,14 +219,14 @@ def chart_heatmap_myth_genre_secondary():
     ax.set_yticks(range(len(pivot.index)))
     ax.set_yticklabels(pivot.index, fontsize=5)
 
-    ax.set_xlabel("Género secundário")
+    ax.set_xlabel("Género (todos)")
     ax.set_ylabel("Mitologia")
-    ax.set_title("Heatmap: Mitologia × Género secundário")
+    ax.set_title("Heatmap: Mitologia × Todos os géneros")
 
     fig.colorbar(cax, ax=ax, label="Nº de jogos")
     plt.tight_layout()
 
-    out_path = os.path.join(OUTPUT_GLOBAL, "heatmap_myth_genre_secondary.png")
+    out_path = os.path.join(OUTPUT_GLOBAL, "heatmap_myth_genre_all.png")
     plt.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     print("→ Gerado:", out_path)
@@ -369,7 +377,7 @@ def chart_global_platform_distribution():
 def charts_by_myth_timelines():
     """
     Linha de lançamentos por mês para cada mitologia.
-    Gera um PNG por mitologia.
+    Gera um PNG por mitologia: timeline.png dentro da pasta da mitologia.
     """
     conn = get_conn()
     cur = conn.cursor()
@@ -406,8 +414,9 @@ def charts_by_myth_timelines():
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
 
-        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in myth_name)
-        out_path = os.path.join(OUTPUT_BY_MYTH, f"timeline_{myth_id}_{safe_name}.png")
+        myth_dir = os.path.join(OUTPUT_BY_MYTH, safe_myth_dir_name(myth_name))
+        os.makedirs(myth_dir, exist_ok=True)
+        out_path = os.path.join(myth_dir, "timeline.png")
         plt.savefig(out_path, dpi=200, bbox_inches="tight")
         plt.close(fig)
         print("→ Gerado:", out_path)
@@ -419,6 +428,7 @@ def charts_by_myth_genre_distribution_primary():
     """
     Para cada mitologia, gráfico de barras com distribuição de géneros
     PRINCIPAIS (gg.is_primary = 1).
+    Guarda em <Mitologia>/genres_primary.png
     """
     conn = get_conn()
 
@@ -456,17 +466,19 @@ def charts_by_myth_genre_distribution_primary():
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
 
-        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in myth_name)
-        out_path = os.path.join(OUTPUT_BY_MYTH, f"genres_primary_{myth_id}_{safe_name}.png")
+        myth_dir = os.path.join(OUTPUT_BY_MYTH, safe_myth_dir_name(myth_name))
+        os.makedirs(myth_dir, exist_ok=True)
+        out_path = os.path.join(myth_dir, "genres_primary.png")
         plt.savefig(out_path, dpi=200, bbox_inches="tight")
         plt.close(fig)
         print("→ Gerado:", out_path)
 
 
-def charts_by_myth_genre_distribution_secondary():
+def charts_by_myth_genre_distribution_all():
     """
-    Para cada mitologia, gráfico de barras com distribuição de géneros
-    SECUNDÁRIOS (gg.is_primary = 0 ou NULL).
+    Para cada mitologia, gráfico de barras com distribuição de TODOS os géneros
+    (principal + secundários).
+    Guarda em <Mitologia>/genres_all.png
     """
     conn = get_conn()
 
@@ -480,14 +492,13 @@ def charts_by_myth_genre_distribution_secondary():
         JOIN mythologies m ON gm.mythology_id = m.id
         JOIN game_genres gg ON gm.game_id     = gg.game_id
         JOIN genres g2      ON gg.genre_id    = g2.id
-        WHERE gg.is_primary IS NULL OR gg.is_primary = 0
         GROUP BY m.id, g2.id;
     """, conn)
 
     conn.close()
 
     if df.empty:
-        print("Sem dados para distribuição de géneros secundários por mitologia.")
+        print("Sem dados para distribuição de todos os géneros por mitologia.")
         return
 
     for myth_id, group in df.groupby("myth_id"):
@@ -497,15 +508,16 @@ def charts_by_myth_genre_distribution_secondary():
 
         fig, ax = plt.subplots(figsize=(8, 4))
         ax.bar(genres, counts)
-        ax.set_title(f"Géneros secundários – {myth_name}")
+        ax.set_title(f"Todos os géneros – {myth_name}")
         ax.set_xlabel("Género")
         ax.set_ylabel("Nº de jogos")
 
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
 
-        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in myth_name)
-        out_path = os.path.join(OUTPUT_BY_MYTH, f"genres_secondary_{myth_id}_{safe_name}.png")
+        myth_dir = os.path.join(OUTPUT_BY_MYTH, safe_myth_dir_name(myth_name))
+        os.makedirs(myth_dir, exist_ok=True)
+        out_path = os.path.join(myth_dir, "genres_all.png")
         plt.savefig(out_path, dpi=200, bbox_inches="tight")
         plt.close(fig)
         print("→ Gerado:", out_path)
@@ -513,10 +525,31 @@ def charts_by_myth_genre_distribution_secondary():
 
 # ----- Interno vs Externo: helpers -----
 
-def _charts_by_myth_internal_external_base(role_filter, label_suffix, filename_prefix):
+def _split_region_countries(region_str: str):
+    """
+    Converte uma string tipo:
+      'Noruega, Suécia, Dinamarca, Islândia'
+    num set: {'noruega', 'suécia', 'dinamarca', 'islândia'}
+    Aceita separadores: vírgula, ponto e vírgula, barra, pipe.
+    """
+    if region_str is None:
+        return set()
+    txt = str(region_str).lower()
+    for sep in [';', '/', '|']:
+        txt = txt.replace(sep, ',')
+    parts = [p.strip() for p in txt.split(',')]
+    return {p for p in parts if p}
+
+
+def _charts_by_myth_internal_external_base(role_filter, label_suffix, filename_suffix):
     """
     Gera gráficos Interno vs Externo por mitologia, a contar Nº de ESTÚDIOS,
     com filtro opcional por role (Developer / Publisher / None para todos).
+
+    Suporta mitologias com vários países na coluna mythologies.region:
+    ex: 'Noruega, Suécia, Dinamarca, Islândia'.
+
+    Guarda em <Mitologia>/<filename_suffix>.png
     """
     conn = get_conn()
 
@@ -557,10 +590,10 @@ def _charts_by_myth_internal_external_base(role_filter, label_suffix, filename_p
         if country_name is None or str(country_name).strip() == "":
             continue
 
-        myth_norm = str(myth_region).strip().lower()
+        myth_countries = _split_region_countries(myth_region)
         country_norm = str(country_name).strip().lower()
 
-        origin_type = "Interno" if myth_norm == country_norm else "Externo"
+        origin_type = "Interno" if country_norm in myth_countries else "Externo"
 
         records.append({
             "myth_id": row["myth_id"],
@@ -593,8 +626,9 @@ def _charts_by_myth_internal_external_base(role_filter, label_suffix, filename_p
         ax.set_ylabel("Nº de estúdios")
 
         plt.tight_layout()
-        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in myth_name)
-        out_path = os.path.join(OUTPUT_BY_MYTH, f"{filename_prefix}_{myth_id}_{safe_name}.png")
+        myth_dir = os.path.join(OUTPUT_BY_MYTH, safe_myth_dir_name(myth_name))
+        os.makedirs(myth_dir, exist_ok=True)
+        out_path = os.path.join(myth_dir, filename_suffix + ".png")
         plt.savefig(out_path, dpi=200, bbox_inches="tight")
         plt.close(fig)
         print("→ Gerado:", out_path)
@@ -603,33 +637,36 @@ def _charts_by_myth_internal_external_base(role_filter, label_suffix, filename_p
 def charts_by_myth_internal_external_all():
     """
     Interno vs Externo – TODOS os estúdios (qualquer role).
+    Guarda em <Mitologia>/internal_external_all.png
     """
     _charts_by_myth_internal_external_base(
         role_filter=None,
         label_suffix="todos os estúdios",
-        filename_prefix="internal_external_all"
+        filename_suffix="internal_external_all"
     )
 
 
 def charts_by_myth_internal_external_devs():
     """
     Interno vs Externo – só Developers (assume gs.role = 'Developer').
+    Guarda em <Mitologia>/internal_external_devs.png
     """
     _charts_by_myth_internal_external_base(
         role_filter="Developer",
         label_suffix="Developers",
-        filename_prefix="internal_external_devs"
+        filename_suffix="internal_external_devs"
     )
 
 
 def charts_by_myth_internal_external_pubs():
     """
     Interno vs Externo – só Publishers (assume gs.role = 'Publisher').
+    Guarda em <Mitologia>/internal_external_pubs.png
     """
     _charts_by_myth_internal_external_base(
         role_filter="Publisher",
         label_suffix="Publishers",
-        filename_prefix="internal_external_pubs"
+        filename_suffix="internal_external_pubs"
     )
 
 
@@ -637,6 +674,7 @@ def charts_by_myth_platform_distribution():
     """
     Para cada mitologia, gráfico de barras com distribuição de plataformas
     (em que plataformas aparecem os jogos dessa mitologia).
+    Guarda em <Mitologia>/platforms.png
     """
     conn = get_conn()
 
@@ -673,8 +711,9 @@ def charts_by_myth_platform_distribution():
         plt.xticks(rotation=45, ha='right')
         plt.tight_layout()
 
-        safe_name = "".join(c if c.isalnum() or c in " _-" else "_" for c in myth_name)
-        out_path = os.path.join(OUTPUT_BY_MYTH, f"platforms_{myth_id}_{safe_name}.png")
+        myth_dir = os.path.join(OUTPUT_BY_MYTH, safe_myth_dir_name(myth_name))
+        os.makedirs(myth_dir, exist_ok=True)
+        out_path = os.path.join(myth_dir, "platforms.png")
         plt.savefig(out_path, dpi=200, bbox_inches="tight")
         plt.close(fig)
         print("→ Gerado:", out_path)
@@ -689,7 +728,7 @@ def main():
     chart_global_myth_distribution()
     chart_global_releases_per_month()
     chart_heatmap_myth_genre_primary()
-    chart_heatmap_myth_genre_secondary()
+    chart_heatmap_myth_genre_all()
     chart_heatmap_myth_country()
     chart_games_by_myth_count()
     chart_global_platform_distribution()
@@ -697,7 +736,7 @@ def main():
     # POR MITOLOGIA
     charts_by_myth_timelines()
     charts_by_myth_genre_distribution_primary()
-    charts_by_myth_genre_distribution_secondary()
+    charts_by_myth_genre_distribution_all()
     charts_by_myth_internal_external_all()
     charts_by_myth_internal_external_devs()
     charts_by_myth_internal_external_pubs()
