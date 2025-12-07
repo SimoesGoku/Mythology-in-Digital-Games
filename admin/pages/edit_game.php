@@ -385,20 +385,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== 'save_all') {
             <p><small>Podes associar vários géneros. O principal é escolhido abaixo.</small></p>
 
             <label>
-                Género principal:<br>
-                <select name="primary_genre">
-                    <option value="0">-- nenhum / não definido --</option>
-                    <?php foreach ($all_genres as $g): ?>
-                        <option value="<?= (int)$g['id'] ?>"
-                            <?= $current_primary_genre === (int)$g['id'] ? 'selected' : '' ?>>
-                            <?= htmlspecialchars($g['name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </label>
-            <br><br>
-
-            <label>
                 Criar novo género (apenas cria na BD, não guarda automaticamente ligações):<br>
                 <input type="text" name="new_genre" placeholder="ex: Action RPG">
             </label>

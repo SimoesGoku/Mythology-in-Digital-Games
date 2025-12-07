@@ -135,55 +135,6 @@ def chart_global_releases_per_month():
     print("→ Gerado:", out_path)
 
 
-def chart_heatmap_myth_genre_primary():
-    """
-    Heatmap mitologia × género PRINCIPAL (gg.is_primary = 1).
-    """
-    conn = get_conn()
-
-    df = pd.read_sql_query("""
-        SELECT 
-            m.name AS mythology,
-            g2.name AS genre,
-            COUNT(DISTINCT gm.game_id) AS num_games
-        FROM game_mythologies gm
-        JOIN mythologies   m  ON gm.mythology_id = m.id
-        JOIN game_genres   gg ON gm.game_id      = gg.game_id
-        JOIN genres        g2 ON gg.genre_id     = g2.id
-        WHERE gg.is_primary = 1
-        GROUP BY m.id, g2.id;
-    """, conn)
-
-    conn.close()
-
-    if df.empty:
-        print("Sem dados para heatmap mitologia × género principal.")
-        return
-
-    pivot = df.pivot(index="mythology", columns="genre", values="num_games").fillna(0)
-
-    fig, ax = plt.subplots(figsize=(12, 12))
-    cax = ax.imshow(pivot.values, aspect='auto')
-
-    ax.set_xticks(range(len(pivot.columns)))
-    ax.set_xticklabels(pivot.columns, rotation=45, ha='right', fontsize=6)
-
-    ax.set_yticks(range(len(pivot.index)))
-    ax.set_yticklabels(pivot.index, fontsize=5)
-
-    ax.set_xlabel("Género principal")
-    ax.set_ylabel("Mitologia")
-    ax.set_title("Heatmap: Mitologia × Género principal")
-
-    fig.colorbar(cax, ax=ax, label="Nº de jogos")
-    plt.tight_layout()
-
-    out_path = os.path.join(OUTPUT_GLOBAL, "heatmap_myth_genre_primary.png")
-    plt.savefig(out_path, dpi=300, bbox_inches="tight")
-    plt.close(fig)
-    print("→ Gerado:", out_path)
-
-
 def chart_heatmap_myth_genre_all():
     """
     Heatmap mitologia × TODOS os géneros (principal + secundários).
@@ -422,56 +373,6 @@ def charts_by_myth_timelines():
         print("→ Gerado:", out_path)
 
     conn.close()
-
-
-def charts_by_myth_genre_distribution_primary():
-    """
-    Para cada mitologia, gráfico de barras com distribuição de géneros
-    PRINCIPAIS (gg.is_primary = 1).
-    Guarda em <Mitologia>/genres_primary.png
-    """
-    conn = get_conn()
-
-    df = pd.read_sql_query("""
-        SELECT 
-            m.id   AS myth_id,
-            m.name AS myth_name,
-            g2.name AS genre,
-            COUNT(DISTINCT gm.game_id) AS num_games
-        FROM game_mythologies gm
-        JOIN mythologies m ON gm.mythology_id = m.id
-        JOIN game_genres gg ON gm.game_id     = gg.game_id
-        JOIN genres g2      ON gg.genre_id    = g2.id
-        WHERE gg.is_primary = 1
-        GROUP BY m.id, g2.id;
-    """, conn)
-
-    conn.close()
-
-    if df.empty:
-        print("Sem dados para distribuição de géneros principais por mitologia.")
-        return
-
-    for myth_id, group in df.groupby("myth_id"):
-        myth_name = group["myth_name"].iloc[0]
-        genres = group["genre"].tolist()
-        counts = group["num_games"].tolist()
-
-        fig, ax = plt.subplots(figsize=(8, 4))
-        ax.bar(genres, counts)
-        ax.set_title(f"Géneros principais – {myth_name}")
-        ax.set_xlabel("Género")
-        ax.set_ylabel("Nº de jogos")
-
-        plt.xticks(rotation=45, ha='right')
-        plt.tight_layout()
-
-        myth_dir = os.path.join(OUTPUT_BY_MYTH, safe_myth_dir_name(myth_name))
-        os.makedirs(myth_dir, exist_ok=True)
-        out_path = os.path.join(myth_dir, "genres_primary.png")
-        plt.savefig(out_path, dpi=200, bbox_inches="tight")
-        plt.close(fig)
-        print("→ Gerado:", out_path)
 
 
 def charts_by_myth_genre_distribution_all():
@@ -727,7 +628,6 @@ def main():
     # GERAIS
     chart_global_myth_distribution()
     chart_global_releases_per_month()
-    chart_heatmap_myth_genre_primary()
     chart_heatmap_myth_genre_all()
     chart_heatmap_myth_country()
     chart_games_by_myth_count()
@@ -735,7 +635,6 @@ def main():
 
     # POR MITOLOGIA
     charts_by_myth_timelines()
-    charts_by_myth_genre_distribution_primary()
     charts_by_myth_genre_distribution_all()
     charts_by_myth_internal_external_all()
     charts_by_myth_internal_external_devs()
