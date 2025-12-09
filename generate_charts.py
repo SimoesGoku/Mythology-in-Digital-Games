@@ -95,12 +95,12 @@ def chart_global_myth_distribution():
 
 def chart_global_releases_per_month():
     """
-    Linha global de lançamentos por mês (jogos com mitologia).
+    Linha global de lançamentos por mês (jogos com mitologia),
+    com meses à escala e sempre até 2025-12.
     """
     conn = get_conn()
-    cur = conn.cursor()
 
-    cur.execute("""
+    df = pd.read_sql_query("""
         SELECT 
             strftime('%Y-%m', g.release_date) AS ym,
             COUNT(DISTINCT g.id) AS num_games
@@ -109,24 +109,39 @@ def chart_global_releases_per_month():
         WHERE g.release_date IS NOT NULL
         GROUP BY ym
         ORDER BY ym;
-    """)
-    rows = cur.fetchall()
+    """, conn)
+
     conn.close()
 
-    if not rows:
+    if df.empty:
         print("Sem dados para lançamentos globais por mês.")
         return
 
-    months = [r[0] for r in rows]
-    counts = [r[1] for r in rows]
+    # Converter para datas reais (1º dia do mês)
+    df["date"] = pd.to_datetime(df["ym"] + "-01", format="%Y-%m-%d")
+    df = df.set_index("date")[["num_games"]]
 
-    fig, ax = plt.subplots(figsize=(10, 4))
-    ax.plot(months, counts, marker='o')
+    # Reindex para todos os meses até 2025-12
+    start_date = df.index.min()
+    end_date = pd.to_datetime("2025-12-01")
+    full_index = pd.date_range(start=start_date, end=end_date, freq="MS")
+    df = df.reindex(full_index, fill_value=0)
+
+    fig, ax = plt.subplots(figsize=(15, 4))
+    ax.plot(df.index, df["num_games"].values, linewidth=1)
     ax.set_title("Lançamentos de jogos com mitologia por mês")
     ax.set_xlabel("Ano-Mês")
     ax.set_ylabel("Nº de jogos")
 
-    plt.xticks(rotation=45, ha='right')
+    # Mostrar só alguns labels (por ex. 1 em cada 24 meses ≈ 2 anos)
+    if len(df.index) > 24:
+        xticks = df.index[::24]
+    else:
+        xticks = df.index
+    ax.set_xticks(xticks)
+    ax.set_xticklabels([d.strftime("%Y-%m") for d in xticks],
+                       rotation=45, ha='right', fontsize=6)
+
     plt.tight_layout()
 
     out_path = os.path.join(OUTPUT_GLOBAL, "global_releases_per_month.png")
@@ -233,7 +248,8 @@ def chart_heatmap_myth_country():
 
 def chart_games_by_myth_count():
     """
-    Barras “nº de jogos com X mitologias” (1, 2, 3+).
+    Barras “nº de jogos com X mitologias por jogo”,
+    usando os valores reais (1, 2, 3, 4, ...) sem agrupar em 3+.
     """
     conn = get_conn()
     cur = conn.cursor()
@@ -255,15 +271,9 @@ def chart_games_by_myth_count():
         print("Sem dados para jogos por nº de mitologias.")
         return
 
-    buckets = defaultdict(int)
-    for cnt_myths, num_games in rows:
-        if cnt_myths <= 2:
-            buckets[cnt_myths] += num_games
-        else:
-            buckets[3] += num_games  # 3+
-
-    labels = ["1", "2", "3+"]
-    values = [buckets[1], buckets[2], buckets[3]]
+    counts_by_myths = {cnt: num for cnt, num in rows}
+    labels = [str(cnt) for cnt in counts_by_myths.keys()]
+    values = list(counts_by_myths.values())
 
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.bar(labels, values)
@@ -282,6 +292,7 @@ def chart_global_platform_distribution():
     """
     Barras: nº de jogos por plataforma (jogos com mitologia).
     Cada jogo conta uma vez por plataforma em que existe.
+    Gráfico mais comprido para aguentar muitas plataformas.
     """
     conn = get_conn()
     cur = conn.cursor()
@@ -306,13 +317,13 @@ def chart_global_platform_distribution():
     platforms = [r[0] for r in rows]
     counts = [r[1] for r in rows]
 
-    fig, ax = plt.subplots(figsize=(10, 5))
+    fig, ax = plt.subplots(figsize=(20, 6))  # mais comprido
     ax.bar(platforms, counts)
     ax.set_title("Distribuição de jogos por plataforma (jogos com mitologia)")
     ax.set_xlabel("Plataforma")
     ax.set_ylabel("Nº de jogos")
 
-    plt.xticks(rotation=45, ha='right')
+    plt.xticks(rotation=45, ha='right', fontsize=7)
     plt.tight_layout()
 
     out_path = os.path.join(OUTPUT_GLOBAL, "global_platform_distribution.png")
@@ -328,6 +339,7 @@ def chart_global_platform_distribution():
 def charts_by_myth_timelines():
     """
     Linha de lançamentos por mês para cada mitologia.
+    Meses à escala e sempre até 2025-12.
     Gera um PNG por mitologia: timeline.png dentro da pasta da mitologia.
     """
     conn = get_conn()
@@ -337,7 +349,7 @@ def charts_by_myth_timelines():
     myths = cur.fetchall()
 
     for myth_id, myth_name in myths:
-        cur.execute("""
+        df = pd.read_sql_query("""
             SELECT 
                 strftime('%Y-%m', g.release_date) AS ym,
                 COUNT(DISTINCT g.id) AS num_games
@@ -347,22 +359,33 @@ def charts_by_myth_timelines():
               AND g.release_date IS NOT NULL
             GROUP BY ym
             ORDER BY ym;
-        """, (myth_id,))
-        rows = cur.fetchall()
+        """, conn, params=(myth_id,))
 
-        if not rows:
+        if df.empty:
             continue
 
-        months = [r[0] for r in rows]
-        counts = [r[1] for r in rows]
+        df["date"] = pd.to_datetime(df["ym"] + "-01", format="%Y-%m-%d")
+        df = df.set_index("date")[["num_games"]]
 
-        fig, ax = plt.subplots(figsize=(8, 4))
-        ax.plot(months, counts, marker='o')
+        start_date = df.index.min()
+        end_date = pd.to_datetime("2025-12-01")
+        full_index = pd.date_range(start=start_date, end=end_date, freq="MS")
+        df = df.reindex(full_index, fill_value=0)
+
+        fig, ax = plt.subplots(figsize=(15, 4))
+        ax.plot(df.index, df["num_games"].values, linewidth=1)
         ax.set_title(f"Lançamentos por mês – {myth_name}")
         ax.set_xlabel("Ano-Mês")
         ax.set_ylabel("Nº de jogos")
 
-        plt.xticks(rotation=45, ha='right')
+        if len(df.index) > 24:
+            xticks = df.index[::24]
+        else:
+            xticks = df.index
+        ax.set_xticks(xticks)
+        ax.set_xticklabels([d.strftime("%Y-%m") for d in xticks],
+                           rotation=45, ha='right', fontsize=6)
+
         plt.tight_layout()
 
         myth_dir = os.path.join(OUTPUT_BY_MYTH, safe_myth_dir_name(myth_name))
