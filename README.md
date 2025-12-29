@@ -58,3 +58,6 @@ If you use this dataset, please cite it as:
 > Simões, D. (2025). *Mythology in Digital Games* [Data set]. (Repository: GitHub; DOI link will be added after deposit in Zenodo/OSF).
 
 The formal citation and DOI will be updated once the dataset is deposited in a long-term repository (e.g. Zenodo/OSF).
+
+
+Ligar o Apache no Xampp e correr php -S localhost:8000 no cmd.
